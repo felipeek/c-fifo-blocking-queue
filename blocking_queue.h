@@ -48,10 +48,12 @@
 
 		blocking_queue_init(&bq, 4);
 		
+		// Example of non-blocking calls
 		blocking_queue_add(&bq, (void*)1);
 		blocking_queue_poll(&bq, &aux);
 		assert(aux == 1);
 
+		// Example of potentially blocking calls
 		blocking_queue_put(&bq, (void*)2);
 		blocking_queue_take(&bq, &aux);
 		assert(aux == 2);
@@ -74,11 +76,13 @@
 
 		blocking_queue_init(&bq, 4);
 		
+		// Example of non-blocking calls
 		*aux = 1;
 		blocking_queue_add(&bq, aux);
 		blocking_queue_poll(&bq, &aux2);
 		assert(*aux2 == 1);
 
+		// Example of potentially blocking calls
 		*aux = 2;
 		blocking_queue_put(&bq, aux);
 		blocking_queue_take(&bq, &aux2);
