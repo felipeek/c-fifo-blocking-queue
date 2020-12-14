@@ -2,17 +2,17 @@
 #define C_FEK_BLOCKING_QUEUE
 
 /*
-    Author: Felipe Einsfeld Kersting
-    The MIT License
+	Author: Felipe Einsfeld Kersting
+	The MIT License
 
-    To use this blocking queue, define C_FEK_BLOCKING_QUEUE_IMPLEMENTATION before including blocking_queue.h in one of your source files.
+	To use this blocking queue, define C_FEK_BLOCKING_QUEUE_IMPLEMENTATION before including blocking_queue.h in one of your source files.
 
 	To use this blocking queue, you must link your binary with pthread.
 
 	Note that fair_lock.h is a pre-requisite for this implementation, so you also need to include fair_lock.h in one of your source files
 	and define C_FEK_FAIR_LOCK_IMPLEMENTATION before including it.
 
-    This blocking queue is thread-safe.
+	This blocking queue is thread-safe.
 
 	This blocking queue has the following properties/features:
 
@@ -31,11 +31,11 @@
 	implementations for the following functions:
 
 	void* malloc(size_t size)
-    void  free(void* block)
+	void  free(void* block)
 
-    For more information about the API, check the comments in the function signatures.
+	For more information about the API, check the comments in the function signatures.
 
-    A usage example:
+	A usage example:
 
 	#define C_FEK_BLOCKING_QUEUE_IMPLEMENTATION
 	#define C_FEK_FAIR_LOCK_IMPLEMENTATION
@@ -125,7 +125,7 @@ typedef struct {
 	// Number of elements currently in the queue.
 	unsigned int queue_size;
 	// The front of the queue
-    unsigned int queue_front;
+	unsigned int queue_front;
 	// The rear of the queue
 	unsigned int queue_rear;
 	// Number of active callers. Used mainly to synchronize the destroy process.

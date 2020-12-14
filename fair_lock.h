@@ -2,14 +2,14 @@
 #define C_FEK_FAIR_LOCK
 
 /*
-    Author: Felipe Einsfeld Kersting
-    The MIT License
+	Author: Felipe Einsfeld Kersting
+	The MIT License
 
-    To use this fair lock, define C_FEK_BLOCKING_FAIR_LOCK before including fair_lock.h in one of your source files.
+	To use this fair lock, define C_FEK_BLOCKING_FAIR_LOCK before including fair_lock.h in one of your source files.
 
 	To use this fair lock, you must link your binary with pthread.
 
-    This fair lock is thread-safe.
+	This fair lock is thread-safe.
 
 	This fair lock is very similar to pthread's fair lock. The difference is that all blocked callers are served in FIFO order.
 
@@ -19,9 +19,9 @@
 	implementations for the following functions:
 
 	void* malloc(size_t size)
-    void  free(void* block)
+	void  free(void* block)
 
-    For more information about the API, check the comments in the function signatures.
+	For more information about the API, check the comments in the function signatures.
 
 	https://github.com/felipeek/c-fifo-blocking-queue
 */
@@ -44,7 +44,7 @@ typedef struct Cond_Queue_Entry {
 // This structure is reserved for internal-use only
 typedef struct Fair_Lock {
 	// Internal Mutex
-    pthread_mutex_t mutex;
+	pthread_mutex_t mutex;
 	// The first Cond_Queue_Entry in the lock queue
 	Cond_Queue_Entry* cond_queue_front;
 	// The last Cond_Queue_Entry in the lock queue
@@ -203,7 +203,7 @@ void fair_lock_destroy(Fair_Lock* lock) {
 }
 
 static int _fair_lock_lock(Fair_Lock *lock, int weak) {
-    pthread_mutex_lock(&lock->mutex);
+	pthread_mutex_lock(&lock->mutex);
 	if (weak && lock->block_weak_locks) {
 		pthread_mutex_unlock(&lock->mutex);
 		return FL_ABANDONED;
@@ -216,7 +216,7 @@ static int _fair_lock_lock(Fair_Lock *lock, int weak) {
 			pthread_mutex_unlock(&lock->mutex);
 			return FL_ERROR;
 		}
-        pthread_cond_wait(&entry->cond, &lock->mutex);
+		pthread_cond_wait(&entry->cond, &lock->mutex);
 		release_cond_queue_entry(lock, entry);
 		if (entry->abandoned) {
 			//assert(weak);
@@ -227,7 +227,7 @@ static int _fair_lock_lock(Fair_Lock *lock, int weak) {
 	}
 	//assert(lock->is_lock_acquired == 0);
 	lock->is_lock_acquired = 1;
-    pthread_mutex_unlock(&lock->mutex);
+	pthread_mutex_unlock(&lock->mutex);
 	return 0;
 }
 
@@ -241,7 +241,7 @@ int fair_lock_lock_weak(Fair_Lock *lock) {
 
 void fair_lock_unlock(Fair_Lock *lock)
 {
-    pthread_mutex_lock(&lock->mutex);
+	pthread_mutex_lock(&lock->mutex);
 	//assert(lock->is_lock_acquired);
 	Cond_Queue_Entry* entry = dequeue_cond_queue_entry(lock);
 	if (entry != NULL) {
@@ -250,7 +250,7 @@ void fair_lock_unlock(Fair_Lock *lock)
 	}
 	
 	lock->is_lock_acquired = 0;
-    pthread_mutex_unlock(&lock->mutex);
+	pthread_mutex_unlock(&lock->mutex);
 }
 
 void fair_lock_block_weak_locks(Fair_Lock* lock)
