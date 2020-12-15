@@ -114,7 +114,6 @@ void fair_lock_block_weak_locks(Fair_Lock* lock);
 // If weak locks are already allowed, this call does nothing.
 void fair_lock_allow_weak_locks(Fair_Lock* lock);
 
-#define C_FEK_FAIR_LOCK_IMPLEMENTATION
 #ifdef C_FEK_FAIR_LOCK_IMPLEMENTATION
 #if !defined(C_FEK_FAIR_LOCK_NO_CRT)
 #include <stdlib.h>
