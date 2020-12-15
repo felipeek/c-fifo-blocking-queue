@@ -122,7 +122,7 @@
 #define BQ_ERROR 1
 #define BQ_FULL 2
 #define BQ_EMPTY 3
-#define BQ_CLOSED 3
+#define BQ_CLOSED 4
 
 // This structure is reserved for internal-use only
 typedef struct {
