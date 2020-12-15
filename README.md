@@ -2,7 +2,9 @@
 
 To use this blocking queue, define `C_FEK_BLOCKING_QUEUE_IMPLEMENTATION` before including blocking_queue.h in one of your source files.
 
-To use this blocking queue, you must link your binary with pthread.
+To use this blocking queue, you MUST link your binary with pthread.
+
+> Note: When using this blocking queue, make sure you are linking to pthreads. If using gcc, just use `-lpthread`. Keep in mind that `libc` provides dummy implementation for most of pthread functions by default, so if you forget linking to pthreads, your program might compile and link just fine. The queue, however, will not work for "mysterious" reasons.
 
 Note that fair_lock.h is a pre-requisite for this implementation, so you also need to include fair_lock.h in one of your source files
 and define `C_FEK_FAIR_LOCK_IMPLEMENTATION` before including it.
@@ -32,7 +34,7 @@ void free(void* block)
 
 For more information about the API, check the comments in the function signatures.
 
-A usage example:
+An usage example:
 
 ```c
 #define C_FEK_BLOCKING_QUEUE_IMPLEMENTATION

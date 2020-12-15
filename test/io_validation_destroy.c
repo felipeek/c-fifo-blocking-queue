@@ -22,8 +22,8 @@ static pthread_t* consumer_threads;
 void* producer(void* args) {
 	while (1) {
 		int ret = blocking_queue_put(&bq, 0);
-		assert(ret == 0 || ret == BQ_DESTROYED);
-		if (ret == BQ_DESTROYED) {
+		assert(ret == 0 || ret == BQ_CLOSED);
+		if (ret == BQ_CLOSED) {
 			break;
 		}
 	}
@@ -35,8 +35,8 @@ void* consumer(void* args) {
 	while (1) {
 		void* got;
 		int ret = blocking_queue_take(&bq, &got);
-		assert(ret == 0 || ret == BQ_DESTROYED);
-		if (ret == BQ_DESTROYED) {
+		assert(ret == 0 || ret == BQ_CLOSED);
+		if (ret == BQ_CLOSED) {
 			break;
 		}
 	}

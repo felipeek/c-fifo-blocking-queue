@@ -3,7 +3,28 @@
 
 /*
 	Author: Felipe Einsfeld Kersting
-	The MIT License
+
+	MIT License
+
+	Copyright (c) 2020 Felipe Kersting
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
 
 	To use this blocking queue, define C_FEK_BLOCKING_QUEUE_IMPLEMENTATION before including blocking_queue.h in one of your source files.
 
@@ -35,7 +56,7 @@
 
 	For more information about the API, check the comments in the function signatures.
 
-	A usage example:
+	An usage example:
 
 	#define C_FEK_BLOCKING_QUEUE_IMPLEMENTATION
 	#define C_FEK_FAIR_LOCK_IMPLEMENTATION
@@ -101,7 +122,7 @@
 #define BQ_ERROR 1
 #define BQ_FULL 2
 #define BQ_EMPTY 3
-#define BQ_DESTROYED 3
+#define BQ_CLOSED 3
 
 // This structure is reserved for internal-use only
 typedef struct {
@@ -130,12 +151,14 @@ typedef struct {
 	unsigned int queue_rear;
 	// Number of active callers. Used mainly to synchronize the destroy process.
 	int active_callers_count;
-	// Indicates whether the queue was destroyed.
-	int destroyed;
+	// Indicates whether the queue was closed.
+	int closed;
 	// Mutex to change 'active_callers_count'
 	pthread_mutex_t active_callers_mutex;
 	// Cond to help synchronizing the destroy process
 	pthread_cond_t destroy_cond;
+	// Auxiliar mutex to make the 'close' call thread-safe
+	pthread_mutex_t close_mutex;
 } Blocking_Queue;
 
 // Init the blocking queue.
@@ -151,7 +174,7 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity);
 // * 0 if success
 // * BQ_ERROR if an error happened
 // * BQ_FULL if the there is no space in the blocking queue
-// * BQ_DESTROYED if the blocking queue was destroyed while the call was blocked
+// * BQ_CLOSED if the blocking queue was closed while the call was blocked
 int blocking_queue_add(Blocking_Queue* bq, void* element);
 // Puts an element to the blocking queue
 // The element is given by 'element'
@@ -161,7 +184,7 @@ int blocking_queue_add(Blocking_Queue* bq, void* element);
 // Returns:
 // * 0 if success
 // * BQ_ERROR if an error happened
-// * BQ_DESTROYED if the blocking queue was destroyed while the call was blocked
+// * BQ_CLOSED if the blocking queue was closed while the call was blocked
 int blocking_queue_put(Blocking_Queue* bq, void* element);
 // Poll an element from the blocking queue
 // The element is stored in '*element'
@@ -172,7 +195,7 @@ int blocking_queue_put(Blocking_Queue* bq, void* element);
 // * 0 if success
 // * BQ_ERROR if an error happened
 // * BQ_EMPTY if the blocking queue is full
-// * BQ_DESTROYED if the blocking queue was destroyed while the call was blocked
+// * BQ_CLOSED if the blocking queue was closed while the call was blocked
 int blocking_queue_poll(Blocking_Queue* bq, void* element);
 // Take an element from the blocking queue
 // The element is stored in '*element'
@@ -182,13 +205,25 @@ int blocking_queue_poll(Blocking_Queue* bq, void* element);
 // Returns:
 // * 0 if success
 // * BQ_ERROR if an error happened
-// * BQ_DESTROYED if the blocking queue was destroyed while the call was blocked
+// * BQ_CLOSED if the blocking queue was closed while the call was blocked
 int blocking_queue_take(Blocking_Queue* bq, void* element);
+// Closes the blocking queue.
+// When a blocking queue is closed, all _add/_put/_poll/_take calls will immediately return BQ_CLOSED if called.
+// If there are active callers blocked in one of these calls, they will also be immediately unblocked and receive BQ_CLOSED.
+// After the blocking queue is closed, it cannot be reopened again. The only thing remaining to do is calling 'blocking_queue_destroy'
+// to free up the resources.
+// This call is an auxiliar call that was introduced just to help solving synchronization issues. It helps the caller to close the queue, while
+// keeping its reference valid. If 'blocking_queue_destroy' is called directly, it would first close the queue just like this function does,
+// but after all callers return it would immediately free up the resources. This function allows the caller to split the closing of the queue
+// and the freeing up of the resources into two calls, so the blocking queue reference is still valid after the queue is closed.
+void blocking_queue_close(Blocking_Queue* bq);
 // Destroys the blocking queue.
-// If there are threads blocked in any of the '_add', '_put', '_poll' or '_take' calls presented above,
-// they will immediately return with BQ_DESTROYED.
+// If the queue is not closed (see 'blocking_queue_close'), it will first close the queue. Closing the queue will make all
+// _add/_put_/_poll/_take calls to return immediately with BQ_CLOSED status. For more information, check 'blocking_queue_close'.
+// After closing the queue and waiting for all active callers to return, the resources are freed.
 // After this function is called, the blocking queue **cannot** be used anymore.
 // Using it will cause undefined behavior and may crash the program.
+// NOTE: This function can only be called a single time. Calling it multiple times will cause undefined behavior.
 void blocking_queue_destroy(Blocking_Queue* bq);
 
 #ifdef C_FEK_BLOCKING_QUEUE_IMPLEMENTATION
@@ -207,15 +242,23 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 		return -1;
 	}
 
+	if (pthread_mutex_init(&bq->close_mutex, NULL)) {
+		pthread_mutex_destroy(&bq->mutex);
+		pthread_mutex_destroy(&bq->active_callers_mutex);
+		return -1;
+	}
+
 	if (pthread_cond_init(&bq->cond, NULL)) {
 		pthread_mutex_destroy(&bq->mutex);
 		pthread_mutex_destroy(&bq->active_callers_mutex);
+		pthread_mutex_destroy(&bq->close_mutex);
 		return -1;
 	}
 
 	if (pthread_cond_init(&bq->destroy_cond, NULL)) {
 		pthread_mutex_destroy(&bq->mutex);
 		pthread_mutex_destroy(&bq->active_callers_mutex);
+		pthread_mutex_destroy(&bq->close_mutex);
 		pthread_cond_destroy(&bq->cond);
 		return -1;
 	}
@@ -223,6 +266,7 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 	if (fair_lock_init(&bq->get_lock)) {
 		pthread_mutex_destroy(&bq->mutex);
 		pthread_mutex_destroy(&bq->active_callers_mutex);
+		pthread_mutex_destroy(&bq->close_mutex);
 		pthread_cond_destroy(&bq->cond);
 		pthread_cond_destroy(&bq->destroy_cond);
 		return -1;
@@ -231,6 +275,7 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 	if (fair_lock_init(&bq->add_lock)) {
 		pthread_mutex_destroy(&bq->mutex);
 		pthread_mutex_destroy(&bq->active_callers_mutex);
+		pthread_mutex_destroy(&bq->close_mutex);
 		pthread_cond_destroy(&bq->cond);
 		pthread_cond_destroy(&bq->destroy_cond);
 		fair_lock_destroy(&bq->get_lock);
@@ -241,7 +286,7 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 	bq->queue_size = 0;
 	bq->queue_front = 0;
 	bq->queue_rear = bq->queue_capacity - 1;
-	bq->destroyed = 0;
+	bq->closed = 0;
 	bq->active_callers_count = 0;
 	bq->get_lock_are_weak_locks_blocked = 0;
 	bq->add_lock_are_weak_locks_blocked = 0;
@@ -250,6 +295,7 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 	{
 		pthread_mutex_destroy(&bq->mutex);
 		pthread_mutex_destroy(&bq->active_callers_mutex);
+		pthread_mutex_destroy(&bq->close_mutex);
 		pthread_cond_destroy(&bq->cond);
 		pthread_cond_destroy(&bq->destroy_cond);
 		fair_lock_destroy(&bq->get_lock);
@@ -260,9 +306,15 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 	return 0;
 }
 
-void blocking_queue_destroy(Blocking_Queue* bq) {
+void blocking_queue_close(Blocking_Queue* bq) {
+	pthread_mutex_lock(&bq->close_mutex);
 	pthread_mutex_lock(&bq->mutex);
-	bq->destroyed = 1;
+	if (bq->closed) {
+		pthread_mutex_unlock(&bq->mutex);
+		pthread_mutex_unlock(&bq->close_mutex);
+		return;
+	}
+	bq->closed = 1;
 	pthread_mutex_unlock(&bq->mutex);
 
 	pthread_mutex_lock(&bq->active_callers_mutex);
@@ -270,11 +322,17 @@ void blocking_queue_destroy(Blocking_Queue* bq) {
 		pthread_cond_signal(&bq->cond);
 		pthread_cond_wait(&bq->destroy_cond, &bq->active_callers_mutex);
 	}
+	pthread_mutex_unlock(&bq->active_callers_mutex);
+	pthread_mutex_unlock(&bq->close_mutex);
+}
+
+void blocking_queue_destroy(Blocking_Queue* bq) {
+	blocking_queue_close(bq);
 	free(bq->queue);
 	fair_lock_destroy(&bq->get_lock);
 	fair_lock_destroy(&bq->add_lock);
-	pthread_mutex_unlock(&bq->mutex);
 	pthread_mutex_destroy(&bq->mutex);
+	pthread_mutex_destroy(&bq->close_mutex);
 }
 
 static int enqueue(Blocking_Queue *bq, void *element) {
@@ -329,11 +387,11 @@ int blocking_queue_add_internal(Blocking_Queue* bq, void* element, int async) {
 
 	pthread_mutex_lock(&bq->mutex);
 
-	if (bq->destroyed) {
+	if (bq->closed) {
 		fair_lock_unlock(&bq->add_lock);
 		pthread_mutex_unlock(&bq->mutex);
 		decrease_active_callers_count(bq);
-		return BQ_DESTROYED;
+		return BQ_CLOSED;
 	}
 
 	if (bq->queue_size == bq->queue_capacity) {
@@ -348,11 +406,11 @@ int blocking_queue_add_internal(Blocking_Queue* bq, void* element, int async) {
 			return BQ_FULL;
 		}
 		pthread_cond_wait(&bq->cond, &bq->mutex);
-		if (bq->destroyed) {
+		if (bq->closed) {
 			fair_lock_unlock(&bq->add_lock);
 			pthread_mutex_unlock(&bq->mutex);
 			decrease_active_callers_count(bq);
-			return BQ_DESTROYED;
+			return BQ_CLOSED;
 		}
 		//assert(bq->queue_size < bq->queue_capacity);
 	}
@@ -393,11 +451,11 @@ int blocking_queue_get_internal(Blocking_Queue* bq, int async, void* element) {
 
 	pthread_mutex_lock(&bq->mutex);
 
-	if (bq->destroyed) {
+	if (bq->closed) {
 		fair_lock_unlock(&bq->get_lock);
 		pthread_mutex_unlock(&bq->mutex);
 		decrease_active_callers_count(bq);
-		return BQ_DESTROYED;
+		return BQ_CLOSED;
 	}
 
 	if (bq->queue_size == 0) {
@@ -412,11 +470,11 @@ int blocking_queue_get_internal(Blocking_Queue* bq, int async, void* element) {
 			return BQ_EMPTY;
 		}
 		pthread_cond_wait(&bq->cond, &bq->mutex);
-		if (bq->destroyed) {
+		if (bq->closed) {
 			fair_lock_unlock(&bq->get_lock);
 			pthread_mutex_unlock(&bq->mutex);
 			decrease_active_callers_count(bq);
-			return BQ_DESTROYED;
+			return BQ_CLOSED;
 		}
 		//assert(bq->queue_size >= 1);
 	}
