@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
 	}
 
 	usleep(TIME_TO_DESTROY_MS * 1000);
-	blocking_queue_destroy(&bq);
+	blocking_queue_close(&bq);
 
 	for (unsigned int i = 0; i < num_producer_threads; ++i) {
 		pthread_join(producer_threads[i], NULL);
@@ -83,6 +83,7 @@ int main(int argc, char** argv) {
 		pthread_join(consumer_threads[i], NULL);
 	}
 
+	blocking_queue_destroy(&bq);
 	free(producer_threads);
 	free(consumer_threads);
 
