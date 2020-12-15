@@ -223,7 +223,7 @@ void blocking_queue_close(Blocking_Queue* bq);
 // After closing the queue and waiting for all active callers to return, the resources are freed.
 // After this function is called, the blocking queue **cannot** be used anymore.
 // Using it will cause undefined behavior and may crash the program.
-// NOTE: This function can only be called a single time. Calling it multiple times will cause undefined behavior.
+// NOTE: This function can only be called a single time for a given blocking queue. Calling it multiple times will cause undefined behavior.
 void blocking_queue_destroy(Blocking_Queue* bq);
 
 #ifdef C_FEK_BLOCKING_QUEUE_IMPLEMENTATION
