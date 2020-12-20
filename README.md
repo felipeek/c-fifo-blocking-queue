@@ -28,8 +28,8 @@ Define `C_FEK_BLOCKING_QUEUE_NO_CRT` if you don't want the C Runtime Library inc
 implementations for the following functions:
 
 ```c
-void* malloc(size_t size)
-void free(void* block)
+void* malloc(size_t size);
+void free(void* block);
 ```
 
 For more information about the API, check the comments in the function signatures.
