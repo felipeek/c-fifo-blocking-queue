@@ -194,7 +194,7 @@ int blocking_queue_put(Blocking_Queue* bq, void* element);
 // Returns:
 // * 0 if success
 // * BQ_ERROR if an error happened
-// * BQ_EMPTY if the blocking queue is full
+// * BQ_EMPTY if the blocking queue is empty
 // * BQ_CLOSED if the blocking queue was closed while the call was blocked
 int blocking_queue_poll(Blocking_Queue* bq, void* element);
 // Take an element from the blocking queue
