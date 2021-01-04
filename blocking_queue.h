@@ -200,7 +200,7 @@ int blocking_queue_poll(Blocking_Queue* bq, void* element);
 // Take an element from the blocking queue
 // The element is stored in '*element'
 // This function may block the caller.
-// If the queue is full, the caller is blocked until there is an element available to take.
+// If the queue is empty, the caller is blocked until there is an element available to take.
 // FIFO order is guaranteed - blocked callers will be served in FIFO order. There is no starvation.
 // Returns:
 // * 0 if success
