@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
 			}
 
 			// This is error prone!
-			usleep(5000);
+			usleep(10000);
 		}
 
 		for (unsigned int i = 0; i < num_threads; ++i) {
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
 			}
 
 			// This is error prone!
-			usleep(5000);
+			usleep(10000);
 		}
 
 		for (unsigned int i = 0; i < num_threads; ++i) {

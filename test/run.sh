@@ -4,6 +4,7 @@ BIN_DIR=bin
 pushd $BASE_DIR
 mkdir -p $BIN_DIR
 gcc -o $BIN_DIR/io_validation io_validation.c -lpthread -Wall -g
+gcc -o $BIN_DIR/io_validation_boundless io_validation_boundless.c -lpthread -Wall -g
 gcc -o $BIN_DIR/io_validation_spin_lock io_validation_spin_lock.c -lpthread -Wall -g
 gcc -o $BIN_DIR/io_validation_destroy io_validation_destroy.c -lpthread -Wall -g
 gcc -o $BIN_DIR/io_validation_fifo io_validation_fifo.c -lpthread -Wall -g
@@ -15,6 +16,17 @@ gcc -o $BIN_DIR/io_validation_fifo io_validation_fifo.c -lpthread -Wall -g
 ./$BIN_DIR/io_validation 128 32 131072
 ./$BIN_DIR/io_validation 1 128 131072
 ./$BIN_DIR/io_validation 128 1 131072
+./$BIN_DIR/io_validation_boundless 1 1 16
+./$BIN_DIR/io_validation_boundless 4 4 256
+./$BIN_DIR/io_validation_boundless 128 4 131072
+./$BIN_DIR/io_validation_boundless 128 128 131072
+./$BIN_DIR/io_validation_boundless 1024 32 1048576
+./$BIN_DIR/io_validation_boundless 1024 1024 1048576
+./$BIN_DIR/io_validation_boundless 32 128 131072
+./$BIN_DIR/io_validation_boundless 128 32 131072
+./$BIN_DIR/io_validation_boundless 1 128 131072
+./$BIN_DIR/io_validation_boundless 128 1 131072
+./$BIN_DIR/io_validation_boundless 1024 1 1048576
 ./$BIN_DIR/io_validation_spin_lock 1 1 16
 ./$BIN_DIR/io_validation_spin_lock 4 4 256
 ./$BIN_DIR/io_validation_spin_lock 4 16 131072
@@ -40,5 +52,4 @@ gcc -o $BIN_DIR/io_validation_fifo io_validation_fifo.c -lpthread -Wall -g
 ./$BIN_DIR/io_validation_fifo 8 8
 ./$BIN_DIR/io_validation_fifo 16 16
 ./$BIN_DIR/io_validation_fifo 32 32
-./$BIN_DIR/io_validation_fifo 128 128
 popd

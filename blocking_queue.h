@@ -51,8 +51,9 @@
 	Define C_FEK_BLOCKING_QUEUE_NO_CRT if you don't want the C Runtime Library included. If this is defined, you must provide
 	implementations for the following functions:
 
-	void* malloc(size_t size)
+	void* malloc(unsigned int size)
 	void  free(void* block)
+	void* memcpy (void* dest, const void* src, unsigned int n)
 
 	For more information about the API, check the comments in the function signatures.
 
@@ -149,6 +150,8 @@ typedef struct {
 	unsigned int queue_front;
 	// The rear of the queue
 	unsigned int queue_rear;
+	// If true, the queue does not have a maximum capacity
+	int is_boundless;
 	// Number of active callers. Used mainly to synchronize the destroy process.
 	int active_callers_count;
 	// Indicates whether the queue was closed.
@@ -163,6 +166,9 @@ typedef struct {
 
 // Init the blocking queue.
 // The blocking queue capacity is given by 'capacity'.
+// When capacity > 0, a normal FIFO blocking queue with fixed size is used.
+// When capacity <= 0, the queue will not have a maximum cap. It will, instead, grow without bounds (this is a special case)
+// Note that, in the special case, the queue will serve as a normal boundless thread-safe queue (no blocking will ever occur when adding elements)
 // Returns 0 if success, -1 if error.
 int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity);
 // Adds an element to the blocking queue
@@ -229,6 +235,7 @@ void blocking_queue_destroy(Blocking_Queue* bq);
 #ifdef C_FEK_BLOCKING_QUEUE_IMPLEMENTATION
 #if !defined(C_FEK_BLOCKING_QUEUE_NO_CRT)
 #include <stdlib.h>
+#include <memory.h>
 #endif
 
 int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
@@ -282,7 +289,13 @@ int blocking_queue_init(Blocking_Queue* bq, unsigned int capacity)
 		return -1;
 	}
 
-	bq->queue_capacity = capacity;
+	if (capacity <= 0) {
+		bq->queue_capacity = 1;
+		bq->is_boundless = 1;
+	} else {
+		bq->queue_capacity = capacity;
+		bq->is_boundless = 0;
+	}
 	bq->queue_size = 0;
 	bq->queue_front = 0;
 	bq->queue_rear = bq->queue_capacity - 1;
@@ -335,12 +348,11 @@ void blocking_queue_destroy(Blocking_Queue* bq) {
 	pthread_mutex_destroy(&bq->close_mutex);
 }
 
-static int enqueue(Blocking_Queue *bq, void *element) {
+static void enqueue(Blocking_Queue *bq, void *element) {
 	//assert(bq->queue_size < bq->queue_capacity);
 	bq->queue_rear = (bq->queue_rear + 1) % bq->queue_capacity;
 	bq->queue[bq->queue_rear] = element;
 	bq->queue_size = bq->queue_size + 1;
-	return 0;
 }
 
 static void *dequeue(Blocking_Queue *bq) {
@@ -363,6 +375,28 @@ static void decrease_active_callers_count(Blocking_Queue* bq) {
 	--bq->active_callers_count;
 	pthread_cond_signal(&bq->destroy_cond);
 	pthread_mutex_unlock(&bq->active_callers_mutex);
+}
+
+static int grow_queue(Blocking_Queue* bq) {
+	unsigned int new_capacity = bq->queue_capacity * 2u;
+	void** new_queue = (void**)malloc(new_capacity * sizeof(void*));
+	if (new_queue == NULL) {
+		return 1;
+	}
+
+	if (bq->queue_rear >= bq->queue_front) {
+		memcpy(new_queue, bq->queue + bq->queue_front, bq->queue_size * sizeof(void*));
+	} else if (bq->queue_front > bq->queue_rear) {
+		memcpy(new_queue, bq->queue + bq->queue_front, (bq->queue_capacity - bq->queue_front) * sizeof(void*));
+		memcpy(new_queue + (bq->queue_capacity - bq->queue_front), bq->queue, (bq->queue_rear + 1) * sizeof(void*));
+	}
+
+	free(bq->queue);
+	bq->queue = new_queue;
+	bq->queue_capacity = new_capacity;
+	bq->queue_front = 0;
+	bq->queue_rear = bq->queue_size - 1;
+	return 0;
 }
 
 int blocking_queue_add_internal(Blocking_Queue* bq, void* element, int async) {
@@ -395,24 +429,33 @@ int blocking_queue_add_internal(Blocking_Queue* bq, void* element, int async) {
 	}
 
 	if (bq->queue_size == bq->queue_capacity) {
-		if (!bq->add_lock_are_weak_locks_blocked) {
-			fair_lock_block_weak_locks(&bq->add_lock);
-			bq->add_lock_are_weak_locks_blocked = 1;
+		if (bq->is_boundless) {
+			if (grow_queue(bq)) {
+				fair_lock_unlock(&bq->add_lock);
+				pthread_mutex_unlock(&bq->mutex);
+				decrease_active_callers_count(bq);
+				return BQ_ERROR;
+			}
+		} else {
+			if (!bq->add_lock_are_weak_locks_blocked) {
+				fair_lock_block_weak_locks(&bq->add_lock);
+				bq->add_lock_are_weak_locks_blocked = 1;
+			}
+			if (async) {
+				fair_lock_unlock(&bq->add_lock);
+				pthread_mutex_unlock(&bq->mutex);
+				decrease_active_callers_count(bq);
+				return BQ_FULL;
+			}
+			pthread_cond_wait(&bq->cond, &bq->mutex);
+			if (bq->closed) {
+				fair_lock_unlock(&bq->add_lock);
+				pthread_mutex_unlock(&bq->mutex);
+				decrease_active_callers_count(bq);
+				return BQ_CLOSED;
+			}
+			//assert(bq->queue_size < bq->queue_capacity);
 		}
-		if (async) {
-			fair_lock_unlock(&bq->add_lock);
-			pthread_mutex_unlock(&bq->mutex);
-			decrease_active_callers_count(bq);
-			return BQ_FULL;
-		}
-		pthread_cond_wait(&bq->cond, &bq->mutex);
-		if (bq->closed) {
-			fair_lock_unlock(&bq->add_lock);
-			pthread_mutex_unlock(&bq->mutex);
-			decrease_active_callers_count(bq);
-			return BQ_CLOSED;
-		}
-		//assert(bq->queue_size < bq->queue_capacity);
 	}
 	if (bq->get_lock_are_weak_locks_blocked) {
 		fair_lock_allow_weak_locks(&bq->get_lock);

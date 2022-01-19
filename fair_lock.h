@@ -39,7 +39,7 @@
 	Define C_FEK_FAIR_LOCK_QUEUE_NO_CRT if you don't want the C Runtime Library included. If this is defined, you must provide
 	implementations for the following functions:
 
-	void* malloc(size_t size)
+	void* malloc(unsigned int size)
 	void  free(void* block)
 
 	For more information about the API, check the comments in the function signatures.
